@@ -775,86 +775,51 @@ bool Binary::has_nx(void) const {
 }
 
 Segment& Binary::add_segment(const Segment& segment, uint64_t base, bool force_note) {
-  const std::vector<uint8_t>& content = segment.content();
-  Segment* new_segment = new Segment{segment};
-  new_segment->datahandler_ = this->datahandler_;
+  uint64_t new_base = base;
 
-  // Use sections and not segments because some data like (.symtab) are not present in segments
-  const uint64_t last_offset = std::accumulate(
-      std::begin(this->sections_),
-      std::end(this->sections_), 0,
-      [] (uint64_t offset, const Section* section) {
-        return std::max<uint64_t>(section->file_offset() + section->size(), offset);
-      });
+  if (base == 0) {
+    if (this->type() == ELF_CLASS::ELFCLASS32) {
+      new_base = round<uint32_t>(std::accumulate(
+            std::begin(this->segments_),
+            std::end(this->segments_), 0llu,
+            [] (uint32_t address, const Segment* segment) {
+              return std::max<uint32_t>(segment->virtual_address() + segment->virtual_size(), address);
+            }));
+    }
 
-  const uint64_t psize = static_cast<uint64_t>(getpagesize());
-  const uint64_t last_offset_aligned = align(last_offset, psize);
-  new_segment->file_offset(last_offset_aligned);
-
-  if (segment.virtual_address() == 0) {
-    new_segment->virtual_address(base + last_offset_aligned);
+    if (this->type() == ELF_CLASS::ELFCLASS64) {
+      new_base = round<uint64_t>(std::accumulate(
+            std::begin(this->segments_),
+            std::end(this->segments_), 0llu,
+            [] (uint64_t address, const Segment* segment) {
+              return std::max<uint64_t>(segment->virtual_address() + segment->virtual_size(), address);
+            }));
+    }
   }
 
-  new_segment->physical_address(new_segment->virtual_address());
-
-  uint64_t segmentsize = align(content.size(), psize);
-  new_segment->physical_size(segmentsize);
-  new_segment->virtual_size(segmentsize);
-
-  if (new_segment->alignment() == 0) {
-    new_segment->alignment(psize);
-  }
-
-  // Patch shdr
-  Header& binary_header = this->get_header();
-  const uint64_t new_section_hdr_offset = new_segment->file_offset() + new_segment->physical_size() + 1;
-  binary_header.section_headers_offset(new_section_hdr_offset);
-
-  this->datahandler_->make_hole(last_offset_aligned, new_segment->physical_size());
-
-  new_segment->content(content);
-
-  auto&& it_segment_phdr = std::find_if(
-      std::begin(this->segments_),
-      std::end(this->segments_),
-      [] (const Segment* s)
+  switch(this->get_header().file_type()) {
+    case E_TYPE::ET_EXEC:
       {
-        return s != nullptr and s->type() == SEGMENT_TYPES::PT_PHDR;
-      });
+        if (force_note) {
+          return this->add_segment<E_TYPE::ET_EXEC, true>(segment, new_base);
+        } else {
+          return this->add_segment<E_TYPE::ET_EXEC, false>(segment, new_base);
+        }
+        break;
+      }
 
-  // If there is a PHDR entry we can't expand the program header table (at least for PIE binaries)
-  // so we have to find a segment which is not mandatory
-  // We choose NOTE section
-  if (it_segment_phdr != std::end(this->segments_) or force_note) {
-    if (it_segment_phdr != std::end(this->segments_)) {
-      Segment *phdr_segment = *it_segment_phdr;
-      const size_t phdr_size = phdr_segment->content().size();
-      phdr_segment->content(std::vector<uint8_t>(phdr_size, 0));
-    }
+    case E_TYPE::ET_DYN:
+      {
+        return this->add_segment<E_TYPE::ET_DYN>(segment, new_base);
+        break;
+      }
 
-    auto&& it_segment_note = std::find_if(
-        std::begin(this->segments_),
-        std::end(this->segments_),
-        [] (const Segment* s)
-        {
-          return s != nullptr and s->type() == SEGMENT_TYPES::PT_NOTE;
-        });
-
-    if (it_segment_note == std::end(this->segments_)) {
-      throw not_found("Can't find 'PT_NOTE' segment");
-    }
-
-    this->segments_.erase(it_segment_note);
-  } else {
-    //TODO: Probleme with static binaries
-    this->get_header().numberof_segments(this->get_header().numberof_segments() + 1);
-    this->get_header().program_headers_offset(last_offset_aligned + new_segment->virtual_size());
-    new_segment->physical_size(new_segment->physical_size());
+    default:
+      {
+        //LOG(WARNING) << "Relocations for architecture " << to_string(this->get_header().file_type()) << " is not supported!";
+        throw not_implemented(std::string("Adding segment for ") + to_string(this->get_header().file_type()) + " is not implemented");
+      }
   }
-
-  this->segments_.push_back(new_segment);
-  return *this->segments_.back();
-
 
 }
 
@@ -942,7 +907,7 @@ const Segment& Binary::segment_from_virtual_address(uint64_t address) const {
   if (it_segment == this->segments_.cend()) {
     std::stringstream adr_str;
     adr_str << "0x" << std::hex << address;
-    throw not_found("Unable to find the segment associated with the " + adr_str.str());
+    throw not_found("Unable to find the segment associated with the address: " + adr_str.str());
   }
 
   return **it_segment;
@@ -1001,252 +966,6 @@ void Binary::remove_section(const std::string& name) {
   // Remove from sections vector
   this->sections_.erase(it_section);
 }
-
-std::pair<uint64_t, uint64_t> Binary::insert_content(std::vector<uint8_t>& content) {
-
-  // Find the first SHT_PROGBIT Section. New content will be added before it
-  // TODO: maynot be the first one with if sections not sorted !!!!!
-  auto&& it_first_progbit = find_if(
-      std::begin(this->sections_),
-      std::end(this->sections_),
-      [] (const Section* section)
-      {
-        return (section->type() == ELF_SECTION_TYPES::SHT_PROGBITS) and
-                section->name() != ".interp";
-      });
-
-  if (it_first_progbit == std::end(this->sections_)) {
-    throw not_found("Unable to find a SHT_PROGBITS section");
-  }
-
-  const ARCH arch = this->get_header().machine_type();
-
-  Section *progbit_section = *it_first_progbit;
-
-  VLOG(VDEBUG) << "Data will be inserted before the section: " << *progbit_section;
-
-  // We align on page size
-  const uint64_t psize = static_cast<uint64_t>(getpagesize());
-  const uint64_t new_section_size = content.size() + (psize - (content.size() % psize));
-
-  // Virtual address of data inserted
-  const uint64_t stub_virtual_address = progbit_section->virtual_address();
-
-  VLOG(VDEBUG) << "New data VA 0x" << std::hex << stub_virtual_address;
-
-  // Offset of data inserted
-  const uint64_t sectionOffset = progbit_section->file_offset();
-
-  VLOG(VDEBUG) << "New data offset 0x" << std::hex << sectionOffset;
-
-  // To remove if we don't want to include data in the section
-  progbit_section->size(progbit_section->size() + new_section_size);
-
-  // <=> malloc
-  this->datahandler_->make_hole(sectionOffset, new_section_size);
-
-  // ============
-  // Patch Header
-  // ============
-  this->get_header().section_headers_offset(this->get_header().section_headers_offset() + new_section_size);
-
-  // ==============
-  // Patch sections
-  // ==============
-  for (Section* section : this->sections_) {
-    // Use >= if you don't want to **include** data in the section
-    if (section->file_offset() > sectionOffset) {
-      DataHandler::Node& node = this->datahandler_->find(
-          section->file_offset(),
-          section->size(),
-          false,
-          DataHandler::Node::SECTION);
-      this->datahandler_->move(node, node.offset() + new_section_size);
-      section->file_offset(section->file_offset() + new_section_size);
-      section->virtual_address(section->virtual_address() + new_section_size);
-    }
-  }
-
-  // ==============
-  // Patch Segments
-  // ==============
-  for (Segment* segment : this->segments_) {
-    if (segment->type() == SEGMENT_TYPES::PT_LOAD) {
-      segment->add(ELF_SEGMENT_FLAGS::PF_W); // TODO: Improve
-    }
-
-    if (segment->file_offset() > sectionOffset) {
-      DataHandler::Node& node = this->datahandler_->find(
-          segment->file_offset(),
-          segment->physical_size(),
-          false,
-          DataHandler::Node::SEGMENT);
-      this->datahandler_->move(node, node.offset() + new_section_size);
-
-      segment->file_offset(segment->file_offset() + new_section_size);
-      segment->virtual_address(segment->virtual_address() + new_section_size);
-      segment->physical_address(segment->physical_address() + new_section_size);
-    }
-
-    // Patch segment size for the segment which contains the new section
-    if ((segment->file_offset() + segment->physical_size()) >= sectionOffset and
-        sectionOffset >= segment->file_offset()) {
-
-      DataHandler::Node& node = this->datahandler_->find(
-          segment->file_offset(),
-          segment->physical_size(),
-          false,
-          DataHandler::Node::SEGMENT);
-      node.size(node.size() + new_section_size);
-
-      segment->virtual_size(segment->virtual_size()   + new_section_size);
-      segment->physical_size(segment->physical_size() + new_section_size);
-      uint64_t relativeOffset = sectionOffset - segment->file_offset();
-      std::vector<uint8_t> segmentData = segment->content();
-      std::copy(
-          std::begin(content),
-          std::end(content),
-          segmentData.data() + relativeOffset);
-      segment->content(segmentData);
-
-    }
-  }
-
-  // =====================================
-  // Patch DT_INIT_ARRAY and DT_FINI_ARRAY
-  // =====================================
-  auto&& it_dtinit = std::find_if(
-      std::begin(this->dynamic_entries_),
-      std::end(this->dynamic_entries_),
-      [] (const DynamicEntry* entry)
-      {
-        return entry->tag() == DYNAMIC_TAGS::DT_INIT_ARRAY;
-      });
-
-  auto&& it_dtfini = std::find_if(
-      std::begin(this->dynamic_entries_),
-      std::end(this->dynamic_entries_),
-      [] (const DynamicEntry* entry)
-      {
-        return entry->tag() == DYNAMIC_TAGS::DT_FINI_ARRAY;
-      });
-
-  // DT_INIT
-  // -------
-  if (it_dtinit != std::end(this->dynamic_entries_)) {
-    std::vector<uint64_t>& array = (*it_dtinit)->array();
-    for (uint64_t& address : array) {
-      if (address > stub_virtual_address) {
-        address += new_section_size;
-      }
-    }
-  }
-
-  // DT_FINI
-  // -------
-  if (it_dtfini != std::end(this->dynamic_entries_)) {
-    std::vector<uint64_t>& array = (*it_dtfini)->array();
-    for (uint64_t& address : array) {
-      if (address > stub_virtual_address) {
-        address += new_section_size;
-      }
-    }
-  }
-
-  // =====================
-  // Patch dynamic symbols
-  // .dynsym
-  // =====================
-  for (Symbol* symbol : this->dynamic_symbols_) {
-    if (symbol->value() >= stub_virtual_address) {
-      symbol->value(symbol->value() + new_section_size);
-    }
-  }
-
-  // ====================
-  // Patch static symbols
-  // ====================
-  for (Symbol* symbol : this->static_symbols_) {
-    if (symbol->value() >= stub_virtual_address) {
-      symbol->value(symbol->value() + new_section_size);
-    }
-  }
-
-  // =====================
-  // Patch dynamic section
-  // .dynamic
-  // =====================
-  for (DynamicEntry* entry : this->dynamic_entries_) {
-    if (
-        entry->tag() == DYNAMIC_TAGS::DT_PLTGOT or
-        entry->tag() == DYNAMIC_TAGS::DT_HASH or
-        entry->tag() == DYNAMIC_TAGS::DT_GNU_HASH or
-        entry->tag() == DYNAMIC_TAGS::DT_STRTAB or
-        entry->tag() == DYNAMIC_TAGS::DT_SYMTAB or
-        entry->tag() == DYNAMIC_TAGS::DT_RELA or
-        entry->tag() == DYNAMIC_TAGS::DT_INIT or
-        entry->tag() == DYNAMIC_TAGS::DT_FINI or
-        entry->tag() == DYNAMIC_TAGS::DT_REL or
-        entry->tag() == DYNAMIC_TAGS::DT_JMPREL or
-        entry->tag() == DYNAMIC_TAGS::DT_INIT_ARRAY or
-        entry->tag() == DYNAMIC_TAGS::DT_FINI_ARRAY or
-        entry->tag() == DYNAMIC_TAGS::DT_PREINIT_ARRAY or
-        entry->tag() == DYNAMIC_TAGS::DT_VERSYM or
-        entry->tag() == DYNAMIC_TAGS::DT_VERDEF or
-        entry->tag() == DYNAMIC_TAGS::DT_VERNEED
-       ) {
-      if (entry->value() >= stub_virtual_address) {
-        entry->value(entry->value() + new_section_size);
-      }
-    }
-  }
-
-  // =================
-  // Patch relocations
-  // =================
-
-  switch(arch) {
-    case ARCH::EM_ARM:
-      {
-        this->patch_relocations<ARCH::EM_ARM>(stub_virtual_address, new_section_size);
-        break;
-      }
-
-
-    case ARCH::EM_AARCH64:
-      {
-        this->patch_relocations<ARCH::EM_AARCH64>(stub_virtual_address, new_section_size);
-        break;
-      }
-
-    case ARCH::EM_X86_64:
-      {
-        this->patch_relocations<ARCH::EM_X86_64>(stub_virtual_address, new_section_size);
-        break;
-      }
-
-    case ARCH::EM_386:
-      {
-        this->patch_relocations<ARCH::EM_386>(stub_virtual_address, new_section_size);
-        break;
-      }
-
-    default:
-      {
-        LOG(WARNING) << "Relocations for architecture " << to_string(arch) << " is not supported!";
-      }
-  }
-
-  // ===============================
-  // Patch Entry Point
-  // ===============================
-
-  // Note: It useless for library but anyway
-  this->get_header().entrypoint(this->get_header().entrypoint() + new_section_size);
-  return {sectionOffset, new_section_size};
-
-}
-
 
 bool Binary::has_section(const std::string& name) const {
   return std::find_if(
@@ -1536,6 +1255,176 @@ const SysvHash& Binary::get_sysv_hash(void) const {
     return this->sysv_hash_;
   } else {
     throw not_found("SYSV hash is not used!");
+  }
+}
+
+
+void Binary::shift_sections(uint64_t from, uint64_t shift) {
+  VLOG(VDEBUG) << "Shift Sections";
+  /// TODO: ADDRESS ?????????? ///////////
+  for (Section* section : this->sections_) {
+    // Use >= if you don't want to **include** data in the section
+    VLOG(VDEBUG) << "[BEFORE] " << *section;
+    if (section->file_offset() >= from) {
+      DataHandler::Node& node = this->datahandler_->find(
+          section->file_offset(),
+          section->size(),
+          false,
+          DataHandler::Node::SECTION);
+      this->datahandler_->move(node, node.offset() + shift);
+      section->file_offset(section->file_offset() + shift);
+      section->virtual_address(section->virtual_address() + shift);
+    }
+    VLOG(VDEBUG) << "[AFTER] " << *section << std::endl;
+  }
+
+}
+
+void Binary::shift_segments(uint64_t from, uint64_t shift) {
+
+  VLOG(VDEBUG) << "Shift Segments";
+
+  for (Segment* segment : this->segments_) {
+    VLOG(VDEBUG) << "[BEFORE] " << *segment;
+    if (segment->file_offset() >= from) {
+      DataHandler::Node& node = this->datahandler_->find(
+          segment->file_offset(),
+          segment->physical_size(),
+          false,
+          DataHandler::Node::SEGMENT);
+      this->datahandler_->move(node, node.offset() + shift);
+
+      segment->file_offset(segment->file_offset() + shift);
+      segment->virtual_address(segment->virtual_address() + shift);
+      segment->physical_address(segment->physical_address() + shift);
+    }
+    VLOG(VDEBUG) << "[AFTER] " << *segment << std::endl;
+
+    // Patch segment size for the segment which contains the new section
+    //if ((segment->file_offset() + segment->physical_size()) >= sectionOffset and
+    //    sectionOffset >= segment->file_offset()) {
+
+    //  DataHandler::Node& node = this->datahandler_->find(
+    //      segment->file_offset(),
+    //      segment->physical_size(),
+    //      false,
+    //      DataHandler::Node::SEGMENT);
+    //  node.size(node.size() + new_section_size);
+
+    //  segment->virtual_size(segment->virtual_size()   + new_section_size);
+    //  segment->physical_size(segment->physical_size() + new_section_size);
+    //  uint64_t relativeOffset = sectionOffset - segment->file_offset();
+    //  std::vector<uint8_t> segmentData = segment->content();
+    //  std::copy(
+    //      std::begin(content),
+    //      std::end(content),
+    //      segmentData.data() + relativeOffset);
+    //  segment->content(segmentData);
+
+    //}
+  }
+}
+
+void Binary::shift_dynamic_entries(uint64_t from, uint64_t shift) {
+  VLOG(VDEBUG) << "Shift Dynamic entries";
+
+  for (DynamicEntry* entry : this->dynamic_entries_) {
+    VLOG(VDEBUG) << "[BEFORE] " << *entry;
+    switch (entry->tag()) {
+      case DYNAMIC_TAGS::DT_PLTGOT:
+      case DYNAMIC_TAGS::DT_HASH:
+      case DYNAMIC_TAGS::DT_GNU_HASH:
+      case DYNAMIC_TAGS::DT_STRTAB:
+      case DYNAMIC_TAGS::DT_SYMTAB:
+      case DYNAMIC_TAGS::DT_RELA:
+      case DYNAMIC_TAGS::DT_REL:
+      case DYNAMIC_TAGS::DT_JMPREL:
+      case DYNAMIC_TAGS::DT_INIT:
+      case DYNAMIC_TAGS::DT_FINI:
+      case DYNAMIC_TAGS::DT_VERSYM:
+      case DYNAMIC_TAGS::DT_VERDEF:
+      case DYNAMIC_TAGS::DT_VERNEED:
+        {
+
+          if (entry->value() >= from) {
+            entry->value(entry->value() + shift);
+          }
+          break;
+        }
+
+      case DYNAMIC_TAGS::DT_INIT_ARRAY:
+      case DYNAMIC_TAGS::DT_FINI_ARRAY:
+      case DYNAMIC_TAGS::DT_PREINIT_ARRAY:
+        {
+          std::vector<uint64_t>& array = entry->array();
+          for (uint64_t& address : array) {
+            if (address >= from) {
+              address += shift;
+            }
+          }
+
+          if (entry->value() >= from) {
+            entry->value(entry->value() + shift);
+          }
+          break;
+        }
+
+      default:
+        {
+          VLOG(VDEBUG) << to_string(entry->tag()) << " not patched";
+        }
+    }
+    VLOG(VDEBUG) << "[AFTER] " << *entry << std::endl;
+  }
+}
+
+
+void Binary::shift_symbols(uint64_t from, uint64_t shift) {
+  VLOG(VDEBUG) << "Shift Symbols";
+  for (Symbol& symbol : this->get_symbols()) {
+    VLOG(VDEBUG) << "[BEFORE] " << symbol;
+    if (symbol.value() >= from) {
+      symbol.value(symbol.value() + shift);
+    }
+    VLOG(VDEBUG) << "[AFTER] " << symbol << std::endl;
+  }
+}
+
+
+void Binary::shift_relocations(uint64_t from, uint64_t shift) {
+  const ARCH arch = this->get_header().machine_type();
+
+  VLOG(VDEBUG) << "Shift relocations for architecture: " << to_string(arch);
+
+  switch(arch) {
+    case ARCH::EM_ARM:
+      {
+        this->patch_relocations<ARCH::EM_ARM>(from, shift);
+        break;
+      }
+
+    case ARCH::EM_AARCH64:
+      {
+        this->patch_relocations<ARCH::EM_AARCH64>(from, shift);
+        break;
+      }
+
+    case ARCH::EM_X86_64:
+      {
+        this->patch_relocations<ARCH::EM_X86_64>(from, shift);
+        break;
+      }
+
+    case ARCH::EM_386:
+      {
+        this->patch_relocations<ARCH::EM_386>(from, shift);
+        break;
+      }
+
+    default:
+      {
+        LOG(WARNING) << "Relocations for architecture " << to_string(arch) << " is not supported!";
+      }
   }
 }
 

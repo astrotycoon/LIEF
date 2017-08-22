@@ -256,19 +256,7 @@ class DLL_PUBLIC Binary : public LIEF::Binary {
     //! @warning We assume that the binary is not position independent
     //!
     //! @return The segment added. `Virtual address` and `File Offset` may have changed
-    Segment& add_segment(const Segment& segment, uint64_t base = 0x400000, bool force_note = false);
-
-    //! @brief This function insert data in the binary
-    //!
-    //! @warning This function should be use for shared library
-    //! whose the code is position independent (-fPIC).
-    //! There could be some problem for PIE binary
-    //!
-    //! @param[in] content The data ton insert
-    //! @return Return {offset, size} where offset is the content's offset
-    //! in the binary and size the content's aligned.
-    std::pair<uint64_t, uint64_t> insert_content(std::vector<uint8_t>& content);
-
+    Segment& add_segment(const Segment& segment, uint64_t base = 0, bool force_note = false);
 
     //! @brief Patch the content at virtual address @p address with @p patch_value
     //!
@@ -400,6 +388,15 @@ class DLL_PUBLIC Binary : public LIEF::Binary {
 
     template<class T>
     void patch_addend(Relocation& relocatio, uint64_t from, uint64_t shift);
+
+    void shift_sections(uint64_t from, uint64_t shift);
+    void shift_segments(uint64_t from, uint64_t shift);
+    void shift_dynamic_entries(uint64_t from, uint64_t shift);
+    void shift_symbols(uint64_t from, uint64_t shift);
+    void shift_relocations(uint64_t from, uint64_t shift);
+
+    template<int OBJECT_TYPE, bool note = false>
+    Segment& add_segment(const Segment& segment, uint64_t base);
 
     //! The binary type
     //! (i.e. `ELF32` or `ELF64`)

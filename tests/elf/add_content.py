@@ -105,10 +105,23 @@ class TestAddContent(TestCase):
         self.compile_binadd(self.binadd_path)
 
         libadd = lief.parse(self.libadd_so)
-        offset, size = libadd.insert_content(STUB.segments[0].content)
+        for i in range(10):
+            segment = libadd.add_segment(STUB.segments[0])
 
-        dt_init = list(filter(lambda e : e.tag == lief.ELF.DYNAMIC_TAGS.INIT, libadd.dynamic_entries))[0]
-        dt_init.value = offset + STUB.header.entrypoint
+            new_ep = (STUB.header.entrypoint - STUB.segments[0].virtual_address) + segment.virtual_address
+
+            if libadd.has_dynamic_entry(lief.ELF.DYNAMIC_TAGS.INIT_ARRAY):
+                init_array = libadd.dynamic_entry_from_tag(lief.ELF.DYNAMIC_TAGS.INIT_ARRAY)
+                callbacks = init_array.array
+                callbacks[0] = new_ep
+                init_array.array = callbacks
+
+
+
+            if libadd.has_dynamic_entry(lief.ELF.DYNAMIC_TAGS.INIT):
+                init = libadd.dynamic_entry_from_tag(lief.ELF.DYNAMIC_TAGS.INIT)
+                init.value = new_ep
+
         libadd.write(self.libadd_so)
 
         st = os.stat(self.libadd_so)
@@ -123,7 +136,8 @@ class TestAddContent(TestCase):
     def tearDown(self):
         # Delete it
         if os.path.isdir(self.tmp_dir):
-            shutil.rmtree(self.tmp_dir)
+            pass
+            #shutil.rmtree(self.tmp_dir)
 
 if __name__ == '__main__':
 

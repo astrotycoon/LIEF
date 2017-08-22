@@ -231,16 +231,10 @@ void init_ELF_Binary_class(py::module& m) {
         py::return_value_policy::reference)
 
     .def("add_segment",
-        &Binary::add_segment,
+        static_cast<Segment& (Binary::*)(const Segment&, uint64_t, bool)>(&Binary::add_segment),
         "Add a segment in the binary",
-        py::arg("segment"), py::arg_v("base", 0x400000), py::arg_v("force_note", false),
+        py::arg("segment"), py::arg_v("base", 0), py::arg_v("force_note", false),
         py::return_value_policy::reference)
-
-    .def("insert_content",
-        &Binary::insert_content,
-        "Add some data in the binary and return the (``offset``, ``size``) of the inserted content\n\n"
-        ".. warning:: This method should be used only for **libraries**\n\n",
-        "content"_a)
 
     .def_property_readonly("has_notes",
         &Binary::has_notes,
