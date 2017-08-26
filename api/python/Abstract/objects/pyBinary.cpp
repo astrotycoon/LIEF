@@ -67,7 +67,19 @@ void init_LIEF_Binary_class(py::module& m) {
         py::return_value_policy::reference_internal)
 
     .def_property_readonly("exported_functions",
-        &Binary::get_exported_functions,
+        [] (const Binary& binary) {
+          const std::vector<std::string>& exported_functions = binary.get_exported_functions();
+          std::vector<py::object> exported_functions_encoded;
+          exported_functions_encoded.reserve(exported_functions.size());
+
+          std::transform(
+              std::begin(exported_functions),
+              std::end(exported_functions),
+              std::back_inserter(exported_functions_encoded),
+              &safe_string_converter);
+          return exported_functions_encoded;
+
+        },
         "Return binary's exported functions (name)")
 
     .def_property_readonly("imported_functions",
