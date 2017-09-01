@@ -63,7 +63,7 @@ void init_LIEF_Section_class(py::module& m) {
         "Section's entropy")
 
     .def("search",
-        static_cast<size_t (LIEF::Section::*)(uint64_t, size_t, uint64_t) const>(&LIEF::Section::search),
+        static_cast<size_t (LIEF::Section::*)(uint64_t, size_t, size_t) const>(&LIEF::Section::search),
         "Look for **integer** within the current section",
         "number"_a, "pos"_a = 0, "size"_a = 0)
 
@@ -73,7 +73,7 @@ void init_LIEF_Section_class(py::module& m) {
         "str"_a, "pos"_a = 0)
 
     .def("search_all",
-        static_cast<std::vector<size_t> (LIEF::Section::*)(uint64_t, uint64_t) const>(&LIEF::Section::search_all),
+        static_cast<std::vector<size_t> (LIEF::Section::*)(uint64_t, size_t) const>(&LIEF::Section::search_all),
         "Look for **all** integers within the current section",
         "number"_a, "size"_a = 0)
 
