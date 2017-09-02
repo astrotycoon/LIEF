@@ -85,7 +85,8 @@ install:
   - set PATH=%PYTHON_PATH%;%PATH%
 
 build_script:
-  - > cmake -A "%CMAKE_ARCH%"
+  - >
+      cmake -A "%CMAKE_ARCH%"
       -DLIEF_TESTS=on
       -DLIEF_PYTHON_API=on
       -DPYTHON_VERSION=%PYTHON_VERSION%
