@@ -143,7 +143,7 @@ script:
     -DLIEF_PYTHON_API=on
     -DLIEF_EXAMPLES=on
     ..
-  - make -j3 lief_examples
+  - make -j3 lief_samples
   - cmake ..
   - make -j3 all
   - ctest -N
