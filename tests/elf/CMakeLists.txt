@@ -75,7 +75,6 @@ ADD_ELF_TEST(elf_test_modifier ${test_modifier_sources})
 
 # Examples tests
 # ==============
-if (LIEF_EXAMPLES)
   file(GLOB_RECURSE SAMPLES_ELF
     "${LIEF_SAMPLES_DIRECTORY}/ELF/*.bin"
     "${LIEF_SAMPLES_DIRECTORY}/ELF/*.so"
@@ -137,7 +136,6 @@ if (LIEF_EXAMPLES)
       ${ELF_PATH})
 
   endforeach()
-endif()
 
 # Python tests
 # ============

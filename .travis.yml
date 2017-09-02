@@ -33,7 +33,7 @@ matrix:
             apt:
               sources: ['ubuntu-toolchain-r-test', 'deadsnakes']
               packages: ['g++-6', 'gcc-6', 'ccache', 'python3.6-dev', 'python-sphinx']
-          env: [ CXX_COMPILER=g++-6, C_COMPILER=gcc-6, PYTHON_VERSION=3.6, PYTHON_INCLUDE_DIR=/usr/include/python3.6m, PYTHON_LIBRARY=/usr/lib/libpython3.6m.so, PYTHON_BINARY=/usr/bin/python3.6, LIEF_DOC=OFF]
+          env: [ CXX_COMPILER=g++-6, C_COMPILER=gcc-6, PYTHON_VERSION=3.6, PYTHON_INCLUDE_DIR=/usr/include/python3.6m, PYTHON_LIBRARY=/usr/lib/libpython3.6m.so, PYTHON_BINARY=/usr/bin/python3.6]
 
         # OSX 10.11 - xcode 7.3 - Python 2.7
         - os: osx
@@ -117,13 +117,6 @@ install:
   - if [ "$GCOV" == "ON" ]; then tar xf lcov_1.13.orig.tar.gz; fi
   - if [ "$GCOV" == "ON" ]; then sudo make -C lcov-1.13/ install; fi
 
-  - if [[ "$LIEF_DOC" == "ON" ]]; then wget --no-check-certificate ftp://ftp.stack.nl/pub/users/dimitri/doxygen-1.8.10.linux.bin.tar.gz; fi
-  - if [[ "$LIEF_DOC" == "ON" ]]; then tar -xzf doxygen-1.8.10.linux.bin.tar.gz; fi
-  - if [[ "$LIEF_DOC" == "ON" ]]; then cd doxygen-1.8.10; fi
-  - if [[ "$LIEF_DOC" == "ON" ]]; then ./configure --prefix /usr; fi
-  - if [[ "$LIEF_DOC" == "ON" ]]; then sudo make install; fi
-  - if [[ "$LIEF_DOC" == "ON" ]]; then cd ..; fi
-
   # Setup CMake 3.1 for Linux
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then wget --no-check-certificate http://cmake.org/files/v3.7/cmake-3.7.2-Linux-x86_64.tar.gz   ;fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then tar -xzf cmake-3.7.2-Linux-x86_64.tar.gz                                                  ;fi
@@ -131,8 +124,6 @@ install:
 
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then wget --no-check-certificate https://bootstrap.pypa.io/get-pip.py   ;fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo $PYTHON_BINARY ./get-pip.py ;fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" && "$LIEF_DOC" == "ON" ]]; then sudo $PYTHON_BINARY -m pip install breathe ;fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" && "$LIEF_DOC" == "ON" ]]; then sudo $PYTHON_BINARY -m pip install sphinx_rtd_theme ;fi
 
   # Prepare build
   - mkdir build
@@ -150,6 +141,7 @@ script:
     -DPYTHON_EXECUTABLE=$PYTHON_BINARY
     -DLIEF_TESTS=on
     -DLIEF_PYTHON_API=on
+    -DLIEF_EXAMPLES=on
     ..
   - make -j2 all
   - ctest -N
