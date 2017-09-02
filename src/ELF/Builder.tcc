@@ -286,7 +286,7 @@ void Builder::build_sections(void) {
     }
   }
 
-
+  string_names_section->content(section_names);
   // TODO: Assert sh_size == content.size()
   this->ios_.seekp(string_names_section->file_offset());
   this->ios_.write(section_names.data(), section_names.size());
