@@ -146,7 +146,7 @@ script:
   - make -j3 lief_samples
   - cmake ..
   - make -j3 all
-  - make -j3 check-kief
+  - make -j3 check-lief
 
 #- sudo make check-lief
 
