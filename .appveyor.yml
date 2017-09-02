@@ -85,7 +85,13 @@ install:
   - set PATH=%PYTHON_PATH%;%PATH%
 
 build_script:
-  - cmake -A "%CMAKE_ARCH%" -DLIEF_TESTS=on -DLIEF_PYTHON_API=on -DPYTHON_VERSION=%PYTHON_VERSION% -DPYTHON_INCLUDE_DIR=%PYTHON_INCLUDE% -DPYTHON_EXECUTABLE=%PYTHON_BINARY% -DPYTHON_LIBRARY=%PYTHON_LIBRARY%
+  - > cmake -A "%CMAKE_ARCH%"
+      -DLIEF_TESTS=on
+      -DLIEF_PYTHON_API=on
+      -DPYTHON_VERSION=%PYTHON_VERSION%
+      -DPYTHON_INCLUDE_DIR=%PYTHON_INCLUDE%
+      -DPYTHON_EXECUTABLE=%PYTHON_BINARY%
+      -DPYTHON_LIBRARY=%PYTHON_LIBRARY%
   - set MSBuildLogger="C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
   - cmake --build . --config Release --target ALL_BUILD -- /v:m /logger:%MSBuildLogger%
 
