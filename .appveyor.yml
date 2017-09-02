@@ -93,6 +93,8 @@ build_script:
       -DPYTHON_EXECUTABLE=%PYTHON_BINARY%
       -DPYTHON_LIBRARY=%PYTHON_LIBRARY%
   - set MSBuildLogger="C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
+  - cmake --build . --config Release --target lief_samples -- /v:m /logger:%MSBuildLogger%
+  - cmake .
   - cmake --build . --config Release --target ALL_BUILD -- /v:m /logger:%MSBuildLogger%
 
 test_script:
