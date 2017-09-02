@@ -144,6 +144,7 @@ script:
     -DLIEF_EXAMPLES=on
     ..
   - make -j3 lief_examples
+  - cmake ..
   - make -j3 all
   - ctest -N
 
