@@ -11,7 +11,17 @@ matrix:
             apt:
               sources: ['ubuntu-toolchain-r-test']
               packages: ['g++-5', 'ccache', 'libpython2.7']
-          env: [ CXX_COMPILER=g++-5, C_COMPILER=gcc-5, PYTHON_VERSION=2.7, PYTHON_INCLUDE_DIR=/usr/include/python2.7, PYTHON_LIBRARY=/usr/lib/libpython2.7.so, PYTHON_BINARY=/usr/bin/python2.7 ]
+          env: >
+            [
+            CXX_COMPILER=g++-5,
+            C_COMPILER=gcc-5,
+            PYTHON_VERSION=2.7,
+            PYTHON_INCLUDE_DIR=/usr/include/python2.7,
+            PYTHON_LIBRARY=/usr/lib/libpython2.7.so,
+            PYTHON_BINARY=/usr/bin/python2.7,
+            LIEF_TEST_STATIC=ON,
+            LIEF_TEST_SHARED=OFF,
+            ]
 
 
         # Linux gcc 5.0 - Python 3.5
@@ -22,7 +32,17 @@ matrix:
             apt:
               sources: ['ubuntu-toolchain-r-test', 'deadsnakes']
               packages: ['g++-5', 'gcc-5', 'ccache', 'python3.5-dev']
-          env: [ CXX_COMPILER=g++-5, C_COMPILER=gcc-5, PYTHON_VERSION=3.5, PYTHON_INCLUDE_DIR=/usr/include/python3.5m, PYTHON_LIBRARY=/usr/lib/libpython3.5m.so, PYTHON_BINARY=/usr/bin/python3.5]
+          env: >
+            [
+            CXX_COMPILER=g++-5,
+            C_COMPILER=gcc-5,
+            PYTHON_VERSION=3.5,
+            PYTHON_INCLUDE_DIR=/usr/include/python3.5m,
+            PYTHON_LIBRARY=/usr/lib/libpython3.5m.so,
+            PYTHON_BINARY=/usr/bin/python3.5,
+            LIEF_TEST_STATIC=OFF,
+            LIEF_TEST_SHARED=ON,
+            ]
 
 
         # Linux gcc 6 - Python 3.6
@@ -32,27 +52,58 @@ matrix:
           addons:
             apt:
               sources: ['ubuntu-toolchain-r-test', 'deadsnakes']
-              packages: ['g++-6', 'gcc-6', 'ccache', 'python3.6-dev', 'python-sphinx']
-          env: [ CXX_COMPILER=g++-6, C_COMPILER=gcc-6, PYTHON_VERSION=3.6, PYTHON_INCLUDE_DIR=/usr/include/python3.6m, PYTHON_LIBRARY=/usr/lib/libpython3.6m.so, PYTHON_BINARY=/usr/bin/python3.6]
+              packages: ['g++-6', 'gcc-6', 'ccache', 'python3.6-dev']
+          env: >
+            [
+            CXX_COMPILER=g++-6,
+            C_COMPILER=gcc-6,
+            PYTHON_VERSION=3.6,
+            PYTHON_INCLUDE_DIR=/usr/include/python3.6m,
+            PYTHON_LIBRARY=/usr/lib/libpython3.6m.so,
+            PYTHON_BINARY=/usr/bin/python3.6,
+            LIEF_TEST_STATIC=ON,
+            LIEF_TEST_SHARED=ON,
+            ]
 
         # OSX 10.11 - xcode 7.3 - Python 2.7
         - os: osx
           osx_image: xcode7.3
           compiler: clang
-          env: [CXX_COMPILER=clang++, C_COMPILER=clang, PYTHON_VERSION=2.7]
+          env: >
+            [
+            CXX_COMPILER=clang++,
+            C_COMPILER=clang,
+            PYTHON_VERSION=2.7,
+            LIEF_TEST_STATIC=ON,
+            LIEF_TEST_SHARED=OFF,
+            ]
 
         # OSX 10.12 - xcode 8.2 - Python 3.5
         - os: osx
           osx_image: xcode8.2
           compiler: clang
-          env: [ CXX_COMPILER=clang++, C_COMPILER=clang, PYTHON_VERSION=3.5]
+          env: >
+            [
+            CXX_COMPILER=clang++,
+            C_COMPILER=clang,
+            PYTHON_VERSION=3.5,
+            LIEF_TEST_STATIC=OFF,
+            LIEF_TEST_SHARED=ON,
+            ]
 
 
         ## OSX 10.12 - xcode 8.2 - Python 3.6
         - os: osx
           osx_image: xcode8.2
           compiler: clang
-          env: [CXX_COMPILER=clang++, C_COMPILER=clang, PYTHON_VERSION=3.6]
+          env: >
+            [
+            CXX_COMPILER=clang++,
+            C_COMPILER=clang,
+            PYTHON_VERSION=3.6,
+            LIEF_TEST_STATIC=ON,
+            LIEF_TEST_SHARED=ON,
+            ]
 
 #branches:
 #  only:
@@ -142,6 +193,8 @@ script:
     -DLIEF_TESTS=on
     -DLIEF_PYTHON_API=on
     -DLIEF_EXAMPLES=on
+    -DLIEF_TEST_SHARED=$LIEF_TEST_SHARED
+    -DLIEF_TEST_STATIC=$LIEF_TEST_STATIC
     ..
   - make -j3 lief_samples
   - cmake ..

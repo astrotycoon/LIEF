@@ -1,6 +1,9 @@
 find_package(Git REQUIRED)
 enable_testing()
 
+option(LIEF_TEST_SHARED "Test LIEF using the SHARED library" ON)
+option(LIEF_TEST_STATIC "Test LIEF using the STATIC library" ON)
+
 # Tests samples
 # =============
 set(SAMPLES_GIT_URL "https://github.com/lief-project/samples.git" CACHE STRING "URL to tests samples")
